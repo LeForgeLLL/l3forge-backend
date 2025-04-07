@@ -39,14 +39,15 @@ function verifyToken(req, res, next) {
 
 // Nodemailer
 const transporter = nodemailer.createTransport({
-  host: "smtp.infomaniak.com",
-  port: 465,
-  secure: true,
+  host: process.env.EMAIL_HOST,
+  port: process.env.EMAIL_PORT,
+  secure: false, // ne pas mettre true ici si tu utilises le port 587
   auth: {
-    user: "veton.llukaj@l3forge.ch",
-    pass: process.env.MAIL_PASS
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
   }
 });
+
 
 // MongoDB Models
 const ContactSchema = new mongoose.Schema({
