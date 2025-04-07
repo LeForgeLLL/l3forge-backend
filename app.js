@@ -37,16 +37,17 @@ function verifyToken(req, res, next) {
   }
 }
 
-// Nodemailer
+// Nodemailer avec Infomaniak (SSL - port 465)
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
-  secure: false, // ne pas mettre true ici si tu utilises le port 587
+  port: Number(process.env.EMAIL_PORT),
+  secure: true, // SSL = true (obligatoire sur le port 465)
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
+    user: process.env.EMAIL_USER?.trim(),
+    pass: process.env.EMAIL_PASS?.trim()
   }
 });
+
 
 
 // MongoDB Models
