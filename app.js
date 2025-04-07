@@ -12,6 +12,13 @@ const Produit = require('./models/Produit');
 const nodemailer = require('nodemailer');
 const fs = require('fs');
 require('dotenv').config();
+// Multer pour gérer les fichiers image (portfolio et produits)
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, 'uploads/'),
+  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
+});
+const upload = multer({ storage });
+
 
 const app = express();
 app.use(cors());
