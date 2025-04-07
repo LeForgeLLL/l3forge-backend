@@ -197,3 +197,43 @@ app.delete('/admin/produits/:id', verifyToken, async (req, res) => {
 
 // Start server
 app.listen(5000, () => console.log('🚀 Serveur démarré sur le port 5000'));
+
+// 📩 Route pour recevoir les demandes de formulaire
+app.post('/api/formulaire', async (req, res) => {
+  try {
+    const data = req.body;
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.MAIL_USER,
+        pass: process.env.MAIL_PASS
+      }
+    });
+
+    const mailOptions = {
+      from: process.env.MAIL_USER,
+      to: 'v.llukaj@l3forge.ch',
+      subject: 'Nouvelle demande de configuration',
+      text: `
+Nom : ${data.nom}
+Prénom : ${data.prenom}
+Téléphone : ${data.telephone}
+Email : ${data.email}
+Budget : ${data.budget}
+Usage : ${data.usage}
+Jeux : ${data.jeux}
+Logiciels : ${data.logiciels}
+Type : ${data.type_client}
+Taille entreprise : ${data.taille_entreprise}
+Description : ${data.infos_supplementaires}
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    res.status(200).json({ msg: "Message envoyé !" });
+  } catch (err) {
+    console.error("Erreur formulaire:", err);
+    res.status(500).json({ msg: "Erreur lors de l'envoi du formulaire." });
+  }
+});
