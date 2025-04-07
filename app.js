@@ -206,16 +206,18 @@ app.post('/api/formulaire', async (req, res) => {
     const data = req.body;
 
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: process.env.EMAIL_HOST,
+      port: Number(process.env.EMAIL_PORT),
+      secure: true, // SSL (port 465)
       auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS
+        user: process.env.EMAIL_USER?.trim(),
+        pass: process.env.EMAIL_PASS?.trim()
       }
     });
 
     const mailOptions = {
-      from: process.env.MAIL_USER,
-      to: 'v.llukaj@l3forge.ch',
+      from: `"L3Forge" <${process.env.EMAIL_USER}>`,
+      to: 'veton.llukaj@l3forge.ch',
       subject: 'Nouvelle demande de configuration',
       text: `
 Nom : ${data.nom}
@@ -234,6 +236,7 @@ Description : ${data.infos_supplementaires}
 
     await transporter.sendMail(mailOptions);
     res.status(200).json({ msg: "Message envoyé !" });
+
   } catch (err) {
     console.error("Erreur formulaire:", err);
     res.status(500).json({ msg: "Erreur lors de l'envoi du formulaire." });
