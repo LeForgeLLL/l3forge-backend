@@ -50,7 +50,7 @@ const transporter = nodemailer.createTransport({
 
 
 
-// MongoDB Models
+// MongoDB - Schéma des demandes
 const ContactSchema = new mongoose.Schema({
   nom: String, prenom: String, email: String, telephone: String,
   budget: String, usage: String, jeux: String, logiciels: String,
@@ -59,40 +59,85 @@ const ContactSchema = new mongoose.Schema({
 });
 const Contact = mongoose.model('Contact', ContactSchema);
 
-// Multer
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),
-  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
-});
-const upload = multer({ storage });
+// 📩 Route pour traiter le formulaire
+app.post('/api/formulaire', async (req, res) => {
+  const {
+    nom, prenom, email, telephone,
+    budget, usage, jeux, logiciels,
+    type_client, taille_entreprise, infos_supplementaires
+  } = req.body;
 
-// Contact form
-app.post('/contact', async (req, res) => {
-  const { nom, prenom, email, telephone, budget, usage, jeux, logiciels, usageType, tailleEntreprise, description } = req.body;
   try {
-    const nouveauContact = new Contact({ nom, prenom, email, telephone, budget, usage, jeux, logiciels, usageType, tailleEntreprise, description });
+    // Enregistrement dans MongoDB
+    const nouveauContact = new Contact({
+      nom, prenom, email, telephone,
+      budget, usage, jeux, logiciels,
+      usageType: type_client,
+      tailleEntreprise: taille_entreprise,
+      description: infos_supplementaires
+    });
     await nouveauContact.save();
 
+    // Transport SMTP (Infomaniak)
+    const transporter = nodemailer.createTransport({
+      host: process.env.EMAIL_HOST,
+      port: Number(process.env.EMAIL_PORT),
+      secure: true,
+      auth: {
+        user: process.env.EMAIL_USER?.trim(),
+        pass: process.env.EMAIL_PASS?.trim()
+      }
+    });
+
+    // Mail vers toi
     await transporter.sendMail({
-      from: 'L3Forge <veton.llukaj@l3forge.ch>',
+      from: `"L3Forge" <${process.env.EMAIL_USER}>`,
       to: 'veton.llukaj@l3forge.ch',
       subject: `Nouvelle demande - ${nom} ${prenom}`,
-      text: `Nom : ${nom}\nPrénom : ${prenom}\nEmail : ${email}\nTéléphone : ${telephone}\nBudget : ${budget}\nUsage : ${usage}\nJeux : ${jeux}\nLogiciels : ${logiciels}\nUsageType : ${usageType}\nTaille entreprise : ${tailleEntreprise}\nDescription : ${description}`
+      text: `Nom : ${nom}
+Prénom : ${prenom}
+Email : ${email}
+Téléphone : ${telephone}
+Budget : ${budget}
+Usage : ${usage}
+Jeux : ${jeux}
+Logiciels : ${logiciels}
+Type : ${type_client}
+Taille entreprise : ${taille_entreprise}
+Infos : ${infos_supplementaires}`
     });
 
+    // Mail au client
     await transporter.sendMail({
-      from: 'L3Forge <veton.llukaj@l3forge.ch>',
+      from: `"L3Forge" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: `Confirmation de votre demande - L3Forge`,
-      text: `Bonjour ${prenom},\n\nMerci pour votre demande. Nous vous contacterons rapidement.\n\nRécapitulatif:\nNom : ${nom}\nPrénom : ${prenom}\nTéléphone : ${telephone}\nBudget : ${budget}\nUsage : ${usage}\nJeux : ${jeux}\nLogiciels : ${logiciels}\nType : ${usageType}\nTaille entreprise : ${tailleEntreprise}\n\nDescription : ${description}`
+      text: `Bonjour ${prenom},
+Merci pour votre demande, nous vous recontacterons rapidement.
+
+Récapitulatif :
+Nom : ${nom}
+Prénom : ${prenom}
+Téléphone : ${telephone}
+Budget : ${budget}
+Usage : ${usage}
+Jeux : ${jeux}
+Logiciels : ${logiciels}
+Type : ${type_client}
+Taille entreprise : ${taille_entreprise}
+
+Description : ${infos_supplementaires}
+      `
     });
 
-    res.status(200).json({ msg: 'Message reçu et mails envoyés.' });
+    res.status(200).json({ msg: 'Message enregistré et mails envoyés.' });
+
   } catch (err) {
-    console.error('Erreur envoi mail/contact:', err);
+    console.error('Erreur formulaire:', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
+
 
 // Admin Login
 app.post('/admin/login', async (req, res) => {
