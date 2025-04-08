@@ -1,4 +1,4 @@
-// backend/app.js
+// backend/app.js avec Cloudinary intégré proprement
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -6,24 +6,36 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const Admin = require('./models/Admin');
 const path = require('path');
-const multer = require('multer');
-const Creation = require('./models/Creation');
-const Produit = require('./models/Produit');
 const nodemailer = require('nodemailer');
 const fs = require('fs');
 require('dotenv').config();
-// Multer pour gérer les fichiers image (portfolio et produits)
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),
-  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
+
+// 📦 Cloudinary (stockage cloud)
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const multer = require('multer');
+const Creation = require('./models/Creation');
+const Produit = require('./models/Produit');
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'l3forge',
+    format: async (req, file) => 'jpg',
+    public_id: (req, file) => Date.now() + '-' + file.originalname.split('.')[0]
+  }
 });
 const upload = multer({ storage });
-
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Connexion MongoDB
 mongoose.connect(process.env.MONGO_URI)
@@ -44,20 +56,18 @@ function verifyToken(req, res, next) {
   }
 }
 
-// Nodemailer avec Infomaniak (SSL - port 465)
+// 📩 Transport mail via Infomaniak
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
   port: Number(process.env.EMAIL_PORT),
-  secure: true, // SSL = true (obligatoire sur le port 465)
+  secure: true,
   auth: {
     user: process.env.EMAIL_USER?.trim(),
     pass: process.env.EMAIL_PASS?.trim()
   }
 });
 
-
-
-// MongoDB - Schéma des demandes
+// 📬 Formulaire de contact
 const ContactSchema = new mongoose.Schema({
   nom: String, prenom: String, email: String, telephone: String,
   budget: String, usage: String, jeux: String, logiciels: String,
@@ -66,16 +76,13 @@ const ContactSchema = new mongoose.Schema({
 });
 const Contact = mongoose.model('Contact', ContactSchema);
 
-// 📩 Route pour traiter le formulaire
 app.post('/api/formulaire', async (req, res) => {
   const {
     nom, prenom, email, telephone,
     budget, usage, jeux, logiciels,
     type_client, taille_entreprise, infos_supplementaires
   } = req.body;
-
   try {
-    // Enregistrement dans MongoDB
     const nouveauContact = new Contact({
       nom, prenom, email, telephone,
       budget, usage, jeux, logiciels,
@@ -85,68 +92,28 @@ app.post('/api/formulaire', async (req, res) => {
     });
     await nouveauContact.save();
 
-    // Transport SMTP (Infomaniak)
-    const transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST,
-      port: Number(process.env.EMAIL_PORT),
-      secure: true,
-      auth: {
-        user: process.env.EMAIL_USER?.trim(),
-        pass: process.env.EMAIL_PASS?.trim()
-      }
-    });
-
-    // Mail vers toi
     await transporter.sendMail({
       from: `"L3Forge" <${process.env.EMAIL_USER}>`,
       to: 'veton.llukaj@l3forge.ch',
       subject: `Nouvelle demande - ${nom} ${prenom}`,
-      text: `Nom : ${nom}
-Prénom : ${prenom}
-Email : ${email}
-Téléphone : ${telephone}
-Budget : ${budget}
-Usage : ${usage}
-Jeux : ${jeux}
-Logiciels : ${logiciels}
-Type : ${type_client}
-Taille entreprise : ${taille_entreprise}
-Infos : ${infos_supplementaires}`
+      text: `Nom : ${nom}\nPrénom : ${prenom}\nEmail : ${email}\nTéléphone : ${telephone}\nBudget : ${budget}\nUsage : ${usage}\nJeux : ${jeux}\nLogiciels : ${logiciels}\nType : ${type_client}\nTaille entreprise : ${taille_entreprise}\nInfos : ${infos_supplementaires}`
     });
 
-    // Mail au client
     await transporter.sendMail({
       from: `"L3Forge" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: `Confirmation de votre demande - L3Forge`,
-      text: `Bonjour ${prenom},
-Merci pour votre demande, nous vous recontacterons rapidement.
-
-Récapitulatif :
-Nom : ${nom}
-Prénom : ${prenom}
-Téléphone : ${telephone}
-Budget : ${budget}
-Usage : ${usage}
-Jeux : ${jeux}
-Logiciels : ${logiciels}
-Type : ${type_client}
-Taille entreprise : ${taille_entreprise}
-
-Description : ${infos_supplementaires}
-      `
+      text: `Bonjour ${prenom},\nMerci pour votre demande, nous vous recontacterons rapidement.`
     });
 
     res.status(200).json({ msg: 'Message enregistré et mails envoyés.' });
-
   } catch (err) {
     console.error('Erreur formulaire:', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
-
-// Admin Login
+// 🔐 Connexion Admin
 app.post('/admin/login', async (req, res) => {
   const { username, password } = req.body;
   const admin = await Admin.findOne({ username });
@@ -155,7 +122,7 @@ app.post('/admin/login', async (req, res) => {
   res.json({ token });
 });
 
-// Messages
+// 📬 Liste des messages
 app.get('/admin/messages', verifyToken, async (req, res) => {
   try {
     const messages = await Contact.find().sort({ date: -1 });
@@ -164,6 +131,7 @@ app.get('/admin/messages', verifyToken, async (req, res) => {
     res.status(500).json({ msg: 'Erreur serveur' });
   }
 });
+
 app.delete('/admin/messages/:id', verifyToken, async (req, res) => {
   try {
     await Contact.findByIdAndDelete(req.params.id);
@@ -173,11 +141,11 @@ app.delete('/admin/messages/:id', verifyToken, async (req, res) => {
   }
 });
 
-// Créations
+// 📸 Créations (Portfolio)
 app.post('/admin/creations', verifyToken, upload.single('image'), async (req, res) => {
   try {
-    const imagePath = `/uploads/${req.file.filename}`;
     const titre = req.body.titre || 'Création L3Forge';
+    const imagePath = req.file.path;
     const creation = new Creation({ titre, imagePath });
     await creation.save();
     res.status(200).json({ msg: 'Création ajoutée', creation });
@@ -185,6 +153,7 @@ app.post('/admin/creations', verifyToken, upload.single('image'), async (req, re
     res.status(500).json({ msg: 'Erreur serveur' });
   }
 });
+
 app.get('/creations', async (req, res) => {
   try {
     const creations = await Creation.find().sort({ date: -1 });
@@ -193,104 +162,52 @@ app.get('/creations', async (req, res) => {
     res.status(500).json({ msg: 'Erreur serveur' });
   }
 });
+
 app.delete('/admin/creations/:id', verifyToken, async (req, res) => {
   try {
     const creation = await Creation.findById(req.params.id);
     if (!creation) return res.status(404).json({ msg: 'Introuvable' });
-    fs.unlink(__dirname + creation.imagePath, () => {});
     await creation.deleteOne();
-    res.json({ msg: 'Supprimé' });
+    res.json({ msg: 'Création supprimée' });
   } catch (err) {
     res.status(500).json({ msg: 'Erreur serveur' });
   }
 });
 
-// Produits
+// 🛒 Produits Boutique
 app.post('/admin/produits', verifyToken, upload.single('image'), async (req, res) => {
   try {
     const { nom, description, prix, lien } = req.body;
-    const imagePath = `/uploads/${req.file.filename}`;
+    const imagePath = req.file.path;
     const produit = new Produit({ nom, description, prix, lien, imagePath });
     await produit.save();
-    res.status(200).json({ msg: "Produit ajouté", produit });
+    res.status(200).json({ msg: 'Produit ajouté', produit });
   } catch (err) {
     console.error('Erreur ajout produit :', err);
-    res.status(500).json({ msg: "Erreur serveur" });
+    res.status(500).json({ msg: 'Erreur serveur' });
   }
 });
+
 app.get('/produits', async (req, res) => {
   try {
     const produits = await Produit.find().sort({ date: -1 });
     res.json(produits);
   } catch (err) {
-    res.status(500).json({ msg: "Erreur serveur" });
+    res.status(500).json({ msg: 'Erreur serveur' });
   }
 });
-// backend/app.js
+
 app.delete('/admin/produits/:id', verifyToken, async (req, res) => {
   try {
     const produit = await Produit.findById(req.params.id);
     if (!produit) return res.status(404).json({ msg: 'Produit non trouvé' });
-
-    const fs = require('fs');
-    const imagePath = path.join(__dirname, produit.imagePath);
-
-    fs.unlink(imagePath, (err) => {
-      if (err) console.error("Erreur suppression image :", err);
-    });
-
-    await Produit.findByIdAndDelete(req.params.id); //✅ Correction ici
-    res.json({ msg: "Produit supprimé" });
+    await Produit.findByIdAndDelete(req.params.id);
+    res.json({ msg: 'Produit supprimé' });
   } catch (err) {
-    console.error("Erreur suppression produit :", err);
-    res.status(500).json({ msg: "Erreur serveur" });
+    console.error('Erreur suppression produit :', err);
+    res.status(500).json({ msg: 'Erreur serveur' });
   }
 });
 
-
-
-// Start server
+// 🚀 Lancement serveur
 app.listen(5000, () => console.log('🚀 Serveur démarré sur le port 5000'));
-
-// 📩 Route pour recevoir les demandes de formulaire
-app.post('/api/formulaire', async (req, res) => {
-  try {
-    const data = req.body;
-
-    const transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST,
-      port: Number(process.env.EMAIL_PORT),
-      secure: true, // SSL (port 465)
-      auth: {
-        user: process.env.EMAIL_USER?.trim(),
-        pass: process.env.EMAIL_PASS?.trim()
-      }
-    });
-
-    const mailOptions = {
-      from: `"L3Forge" <${process.env.EMAIL_USER}>`,
-      to: 'veton.llukaj@l3forge.ch',
-      subject: 'Nouvelle demande de configuration',
-      text: `
-Nom : ${data.nom}
-Prénom : ${data.prenom}
-Téléphone : ${data.telephone}
-Email : ${data.email}
-Budget : ${data.budget}
-Usage : ${data.usage}
-Jeux : ${data.jeux}
-Logiciels : ${data.logiciels}
-Type : ${data.type_client}
-Taille entreprise : ${data.taille_entreprise}
-Description : ${data.infos_supplementaires}
-      `
-    };
-
-    await transporter.sendMail(mailOptions);
-    res.status(200).json({ msg: "Message envoyé !" });
-
-  } catch (err) {
-    console.error("Erreur formulaire:", err);
-    res.status(500).json({ msg: "Erreur lors de l'envoi du formulaire." });
-  }
-});
